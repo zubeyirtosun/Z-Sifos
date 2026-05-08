@@ -1,0 +1,30 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+venv/
+env/
+ENV/
+
+# Databases
+*.db
+*.db-journal
+data/
+
+# Node / Frontend
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+
+# VS Code
+.vscode/
+
+# Project specific
+scratch/
+z-sifos-hub/
+docs/model_performance_report.md

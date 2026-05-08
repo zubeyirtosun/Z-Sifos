@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', sans-serif;
+  --font-display: 'Outfit', sans-serif;
+  
+  --color-brand-emerald: #10b981;
+  --color-brand-blue: #3b82f6;
+}
+
+@layer base {
+  :root {
+    --bg-primary: #f8fafc;
+    --text-primary: #0f172a;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg-primary: #030712;
+      --text-primary: #f1f5f9;
+    }
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    @apply transition-colors duration-200;
+  }
+}
+
+/* Custom Components using @apply */
+@layer components {
+  .glass-effect {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl;
+  }
+
+  .glassmorphic-card {
+    @apply relative bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl border border-white/10 rounded-[1.5rem] shadow-2xl;
+  }
+
+  .glassmorphic-button {
+    @apply relative px-4 py-2 rounded-full font-medium bg-gradient-to-r from-brand-emerald/20 to-brand-emerald/10 backdrop-blur-xl border border-brand-emerald/30 transition-all duration-300;
+  }
+}
+
+/* Global styles */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-800 rounded-full hover:bg-gray-700;
+}
