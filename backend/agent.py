@@ -89,20 +89,19 @@ def determine_agent_mode(
 
 _FEW_SHOT_STRICT = """
 Examples:
-User: What is 2+2? -> 4
-User: Capital of France? -> Paris
-User: CEO of Apple? -> <call:search>current CEO of Apple</call>
-""".strip()
+- 2+2 = 4
+- Paris = France capital
+- Use <search>query</search> if you need current info.
+Answer directly.""".strip()
 
 # Ultra-light prompt for very small models (<1B params)
-_LIGHTWEIGHT_STRICT_PROMPT = """You are a helpful AI. Answer in the SAME language as the user.
-
-Rules:
-- Be SHORT and DIRECT
-- If you don't know, say "I don't know"
-- For facts about people/events, use: <call:search>query</call>
-- Examples: "2+2 = 4", "France capital = Paris"
-""".strip()
+_LIGHTWEIGHT_STRICT_PROMPT = """Answer these rules:
+- Be SHORT. 
+- If you don't know, say "I don't know".
+- Don't use tags. Just answer.
+- Example: "2+2 = 4"
+- Example: "Paris" for "capital of France"
+Answer now:""".strip()
 
 def _build_system_prompt(tools: Dict[str, Any], mode: str, internet_enabled: bool, model_name: str = "") -> str:
     # Ultra-light mode detection for very small models (<1B params)
@@ -629,12 +628,31 @@ class CustomAgentExecutor:
                 final_answer_is_empty = not final_answer or len(final_answer.strip()) < 10
                 
                 if total_tokens_yielded == 0 and has_significant_thought and final_answer_is_empty:
-                    # Model only produced thought content - use it as the final answer
-                    # Don't call _clean_for_display on thought content as it strips tags poorly
+                    # Model only produced thought content - extract the ANSWER from it
                     thought_content = accumulated_thought.strip()
-                    thought_content = self.plugin_manager.after_response(thought_content)
-                    if thought_content:
-                        yield {"type": "token", "content": thought_content}
+                    
+                    # Try to extract the final answer from thinking content
+                    # Look for patterns like "Answer:", "is 4", "= 4", etc.
+                    answer_match = None
+                    for pattern in [r"=\s*(\d+)", r"Answer:\s*(.+?)(?:\n|$)", r"The answer is[:\s]+(.+?)(?:\n|$)", r"Final answer[:\s]+(.+?)(?:\n|$)", r"is\s+(\d+)\.?$"]:
+                        match = re.search(pattern, thought_content, re.IGNORECASE | re.MULTILINE)
+                        if match:
+                            answer_match = match.group(1).strip()
+                            break
+                    
+                    # If we found an answer, use it. Otherwise, just use the first few lines
+                    if answer_match and len(answer_match) < 50:
+                        extracted = answer_match
+                    else:
+                        # Last resort: take just the last 50 chars as the answer
+                        extracted = thought_content[-100:] if len(thought_content) > 100 else thought_content
+                        # Remove thinking process, keep just the result
+                        lines = [l.strip() for l in extracted.split('\n') if l.strip() and not l.startswith(('Analyze', 'Determine', 'Check', 'Wait', 'The', 'I ', 'This'))]
+                        if lines:
+                            extracted = lines[-1] if len(lines) > 1 else lines[0]
+                    
+                    if extracted:
+                        yield {"type": "token", "content": extracted}
                 elif total_tokens_yielded == 0 and final_answer:
                     # No tokens yielded but we have some final answer text - use it
                     yield {"type": "token", "content": final_answer}
