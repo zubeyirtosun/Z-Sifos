@@ -158,11 +158,24 @@ function App() {
     }
   };
 
-  const handleSelectAgent = (agentId) => {
+  const handleSelectAgent = async (agentId) => {
     if (!agentId) return;
     setActiveAgentId(agentId);
-    // Re-check Ollama status when selecting an agent
     checkOllamaStatus();
+    
+    // Load conversation history for the selected agent
+    try {
+      const resp = await axios.get(`${API_URL}/agents/${agentId}/conversations`);
+      const history = resp.data.map(msg => ({
+        role: msg.role,
+        text: msg.message,
+        isStreaming: false,
+        timestamp: msg.created_at
+      }));
+      setMessages(prev => ({ ...prev, [agentId]: history }));
+    } catch (e) {
+      console.error("Failed to load conversation history:", e);
+    }
   };
   
   const activeAgent = agents && agents.length > 0 ? agents.find(a => a.id === activeAgentId) : null;

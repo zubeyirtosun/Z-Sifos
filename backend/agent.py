@@ -428,12 +428,19 @@ class CustomAgentExecutor:
                     raw_text += token
                     logger.info(f"[AGENT] Token: {repr(token[:30])}..., total: {len(raw_text)}")
                     
+                    # Global output limit check (Enforced for all tokens)
+                    max_chars = MAX_OUTPUT_CHARS.get(self.mode, 3000)
+                    if len(raw_text) > max_chars:
+                        yield {"type": "status", "content": f"Maksimum çıktı sınırı aşıldı ({max_chars} chars)."}
+                        break
+
                     # Detect tag transitions (highly flexible for small models)
                     # Also detect if we're in thinking mode (Qwen-style)
                     if not in_thought and not in_call:
                         if re.search(r"<thought", raw_text[-20:], re.IGNORECASE):
                             in_thought = True
                             continue
+                        
                         # Qwen-style thinking detection - if token contains question words and no <call:>
                         if "analyze the request" in token.lower() or "determine" in token.lower():
                             # Likely in thinking mode - check if it's looping
@@ -447,17 +454,12 @@ class CustomAgentExecutor:
                                         yield {"type": "status", "content": "Döngü tespit edildi, cevaba geçiliyor..."}
                                         in_thought = False
                                         break
-                        # Safety: If we've seen > 50 chars and NO tags, force 'token' type
+                        
+                        # Safety: If we've seen > 10 chars and NO tags, force 'token' type
                         if len(raw_text) > 10 and not in_thought and not in_call:
                             # If the model started outputting without tags, yield it as answer
                             yield {"type": "token", "content": token}
                             continue
-                        
-                        # Global output limit check
-                        max_chars = MAX_OUTPUT_CHARS.get(self.mode, 3000)
-                        if len(raw_text) > max_chars:
-                            yield {"type": "status", "content": f"Maksimum çıktı sınırı aşıldı ({max_chars} chars)."}
-                            break
 
                     if in_thought:
                         # Check for tool call in thinking mode too

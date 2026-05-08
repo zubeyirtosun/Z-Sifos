@@ -28,6 +28,7 @@ from backend.providers import (
     check_ollama_status,
 )
 from backend.logging_config import setup_logging, get_logger
+from backend.audio_proc import transcribe_audio
 from backend.rate_limit import get_rate_limiter
 from backend.exceptions import ValidationError, InternalError, RateLimitError
 
@@ -673,7 +674,6 @@ async def upload_document(
 
     # Trigger background indexing
     from backend.scheduler import scheduler, add_indexing_job
-    from backend.audio_proc import transcribe_audio
     add_indexing_job(db_doc.id)
 
     return db_doc
@@ -810,6 +810,9 @@ async def chat_with_agent_stream(
 
     session_history = []
     if db_agent.memory_enabled:
+        db.add(models.ConversationHistory(agent_id=agent_id, role="user", message=request.message))
+        db.commit()
+        
         session_history = (
             db.query(models.ConversationHistory)
             .filter(models.ConversationHistory.agent_id == agent_id)
@@ -852,7 +855,6 @@ async def chat_with_agent_stream(
             # Save to memory only on clean completion
             if db_agent.memory_enabled and full_response:
                 full_answer = "".join(full_response)
-                db.add(models.ConversationHistory(agent_id=agent_id, role="user", message=request.message))
                 db.add(models.ConversationHistory(agent_id=agent_id, role="ai", message=full_answer))
                 db.commit()
 
