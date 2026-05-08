@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker
 
 # Absolute path — always points to the project root DB regardless of cwd
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = _PROJECT_ROOT / "antigravity_ai.db"
+DB_PATH = _PROJECT_ROOT / "z_sifos.db"
 
 SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH}"
 

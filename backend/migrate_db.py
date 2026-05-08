@@ -1,7 +1,7 @@
 import sqlite3
 import os
 
-db_path = "./antigravity_ai.db"
+db_path = "./z_sifos.db"
 
 if not os.path.exists(db_path):
     print("Veritabanı bulunamadı, yeni veritabanı ilk başlatmada otomatik oluşacaktır.")

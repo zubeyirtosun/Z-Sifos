@@ -1,7 +1,7 @@
 import sqlite3
 import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "antigravity_ai.db")
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "z_sifos.db")
 
 def migrate():
     print(f"Connecting to database: {DB_PATH}")
