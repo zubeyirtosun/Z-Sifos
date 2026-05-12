@@ -20,12 +20,14 @@ class OllamaProvider(ModelProvider):
     def get_llm(self, model_name: str):
         return ChatOllama(
             model=model_name,
-            temperature=0.3, # Slightly lower for stability
+            temperature=0.3,
             base_url=OLLAMA_API_URL,
-            timeout=120.0,
-            num_ctx=2048,
-            repeat_penalty=1.2, # Slightly higher for small models
-            stop=["</thought>", "</call>", "Observation:", "\nUser:", "\nHuman:"]
+            timeout=180.0,
+            num_ctx=8192,         # Enough for system prompt + history + full answer
+            repeat_penalty=1.1,
+            # Do NOT stop on </thought> or </call> — the agent parser handles those.
+            # Only stop on explicit conversation format markers.
+            stop=["\nUser:", "\nHuman:", "\n<|user|>", "\n<|end|>"]
         )
 
 class LlamaCppProvider(ModelProvider):

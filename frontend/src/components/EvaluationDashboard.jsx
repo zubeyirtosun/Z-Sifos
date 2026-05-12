@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart3, TrendingUp, AlertCircle, Zap, Search, Eye, Clock } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export default function EvaluationDashboard({ agent }) {
+  const { token } = useAuth();
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -13,7 +15,11 @@ export default function EvaluationDashboard({ agent }) {
     
     const fetchMetrics = async () => {
       try {
-        const response = await axios.get(`${API_URL}/agents/${agent.id}/metrics`);
+        const response = await axios.get(`${API_URL}/agents/${agent.id}/metrics`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
         setMetrics(response.data);
       } catch (error) {
         console.error('Failed to fetch metrics:', error);

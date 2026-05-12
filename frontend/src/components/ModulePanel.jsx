@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Settings, Globe, Database, Cpu, HardDrive, Languages, FileText, Trash2, Upload, X, Loader2, Zap } from 'lucide-react';
+import { Settings, Globe, Database, Cpu, HardDrive, Languages, FileText, Trash2, Upload, X, Loader2, Zap, FileJson, FileCode, FileSpreadsheet, File as FileIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
 import ConversationHistory from './ConversationHistory';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -64,7 +66,25 @@ function ToggleCard({ icon: Icon, label, desc, active, onToggle, colorOn, colorO
   );
 }
 
-export default function ModulePanel({ agent, onUpdate, onClearChat }) {
+const getFileIcon = (filename) => {
+  const ext = filename.split('.').pop().toLowerCase();
+  switch (ext) {
+    case 'pdf': return <FileText className="w-3.5 h-3.5 text-red-400 shrink-0" />;
+    case 'docx':
+    case 'doc': return <FileText className="w-3.5 h-3.5 text-blue-400 shrink-0" />;
+    case 'txt':
+    case 'md': return <FileText className="w-3.5 h-3.5 text-emerald-400 shrink-0" />;
+    case 'csv': return <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-500 shrink-0" />;
+    case 'json': return <FileJson className="w-3.5 h-3.5 text-yellow-400 shrink-0" />;
+    case 'js':
+    case 'py':
+    case 'html': return <FileCode className="w-3.5 h-3.5 text-violet-400 shrink-0" />;
+    default: return <FileIcon className="w-3.5 h-3.5 text-gray-400 shrink-0" />;
+  }
+};
+
+export default function ModulePanel({ agent, onUpdate, onClearChat, onDocumentUploaded }) {
+  const { token } = useAuth();
   const [documents, setDocuments] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -75,7 +95,11 @@ export default function ModulePanel({ agent, onUpdate, onClearChat }) {
   const fetchDocuments = useCallback(async () => {
     if (!agent) return;
     try {
-      const resp = await fetch(`${API_URL}/agents/${agent.id}/documents`);
+      const resp = await fetch(`${API_URL}/agents/${agent.id}/documents`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       const data = await resp.json();
       setDocuments(data);
     } catch (e) {
@@ -86,7 +110,11 @@ export default function ModulePanel({ agent, onUpdate, onClearChat }) {
   const fetchStats = useCallback(async () => {
     if (!agent) return;
     try {
-      const resp = await fetch(`${API_URL}/agents/${agent.id}/stats`);
+      const resp = await fetch(`${API_URL}/agents/${agent.id}/stats`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       const data = await resp.json();
       setStats(data);
     } catch (e) {
@@ -107,6 +135,9 @@ export default function ModulePanel({ agent, onUpdate, onClearChat }) {
     try {
       const resp = await fetch(`${API_URL}/agents/${agent.id}/documents`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
         body: formData,
       });
       if (!resp.ok) {
@@ -114,8 +145,10 @@ export default function ModulePanel({ agent, onUpdate, onClearChat }) {
         alert(err.detail || 'Yükleme başarısız');
         return;
       }
-      await fetchDocuments();
-      await fetchStats();
+      const doc = await resp.json();
+      setDocuments(prev => [...prev, doc]);
+      fetchStats();
+      if (onDocumentUploaded) onDocumentUploaded(doc);
     } catch (e) {
       alert('Dosya yüklenemedi: ' + e.message);
     } finally {
@@ -126,11 +159,12 @@ export default function ModulePanel({ agent, onUpdate, onClearChat }) {
   const handleDeleteDoc = async (docId) => {
     if (!window.confirm('Bu dosyayı silmek istiyor musunuz?')) return;
     try {
-      await fetch(`${API_URL}/agents/${agent.id}/documents/${docId}`, { method: 'DELETE' });
+      await axios.delete(`${API_URL}/agents/${agent.id}/documents/${docId}`);
       setDocuments(prev => prev.filter(d => d.id !== docId));
       fetchStats();
     } catch (e) {
-      alert('Silinemedi');
+      console.error('Delete error:', e);
+      alert('Dosya silinemedi. Lütfen tekrar deneyin.');
     }
   };
 
@@ -142,7 +176,11 @@ export default function ModulePanel({ agent, onUpdate, onClearChat }) {
       return;
     }
     setIsDetectingMode(true);
-    fetch(`${API_URL}/models/info?model_name=${encodeURIComponent(agent.model_name)}&provider=${agent.provider}`)
+    fetch(`${API_URL}/models/info?model_name=${encodeURIComponent(agent.model_name)}&provider=${agent.provider}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
       .then(r => r.json())
       .then(data => {
         if (data.size && data.size !== 'Unknown') {
@@ -171,7 +209,12 @@ export default function ModulePanel({ agent, onUpdate, onClearChat }) {
   const handleClearChat = async () => {
     if (!window.confirm('Tüm konuşma geçmişini silmek istediğinize emin misiniz?')) return;
     try {
-      await fetch(`${API_URL}/agents/${agent.id}/conversations`, { method: 'DELETE' });
+      await fetch(`${API_URL}/agents/${agent.id}/conversations`, { 
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (onClearChat) onClearChat(agent.id);
       fetchStats();
     } catch (e) {
@@ -363,22 +406,30 @@ export default function ModulePanel({ agent, onUpdate, onClearChat }) {
                   {documents.map((doc) => (
                     <motion.div
                       key={doc.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      className="flex items-center justify-between bg-gray-900/60 border border-gray-800/60 rounded-xl px-3 py-2"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex items-center justify-between bg-gray-900/80 border border-gray-800/60 rounded-2xl px-4 py-3 hover:bg-gray-800/60 transition-all group"
                     >
-                      <div className="flex items-center space-x-2 min-w-0">
-                        <FileText className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+                      <div className="flex items-center space-x-3 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-gray-950 flex items-center justify-center border border-gray-800 group-hover:border-violet-500/30 transition-colors">
+                          {getFileIcon(doc.original_name)}
+                        </div>
                         <div className="min-w-0">
-                          <div className="text-[11px] text-gray-300 truncate font-medium">{doc.original_name}</div>
-                          <div className="text-[9px] text-gray-600">{doc.chunk_count} parça · {(doc.file_size / 1024).toFixed(1)} KB</div>
+                          <div className="text-[12px] text-gray-200 truncate font-semibold">{doc.original_name}</div>
+                          <div className="text-[10px] text-gray-500 font-mono">
+                            {doc.chunk_count} parça · {(doc.file_size / 1024).toFixed(1)} KB
+                          </div>
                         </div>
                       </div>
                       <button
-                        onClick={() => handleDeleteDoc(doc.id)}
-                        className="text-gray-600 hover:text-red-400 transition-colors shrink-0 ml-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteDoc(doc.id);
+                        }}
+                        className="p-1.5 rounded-lg hover:bg-red-500/10 text-gray-500 hover:text-red-400 transition-all shrink-0 ml-2 group-hover:opacity-100 opacity-60"
+                        title="Dosyayı Sil"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <X className="w-4 h-4" />
                       </button>
                     </motion.div>
                   ))}

@@ -5,6 +5,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -109,6 +110,7 @@ const ThoughtBlock = ({ thought, currentTool, isStreaming }) => {
 };
 
 export default function ChatArea({ agent, messages, onSendMessage, isTyping, isCheckingOllama, ollamaStatus, onDocumentUploaded }) {
+  const { token } = useAuth();
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
@@ -154,7 +156,7 @@ export default function ChatArea({ agent, messages, onSendMessage, isTyping, isC
       const resp = await fetch(`${API_URL}/agents/${agent.id}/documents`, {
         method: 'POST',
         headers: { 
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         },
         body: formData,
       });
@@ -211,7 +213,7 @@ export default function ChatArea({ agent, messages, onSendMessage, isTyping, isC
 
         try {
           const resp = await axios.post(`${API_URL}/audio/transcribe`, formData, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            headers: { 'Authorization': `Bearer ${token}` }
           });
           if (resp.data.text) {
             setInput(prev => (prev + ' ' + resp.data.text).strip());
@@ -318,7 +320,7 @@ export default function ChatArea({ agent, messages, onSendMessage, isTyping, isC
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ 
           message: message, 

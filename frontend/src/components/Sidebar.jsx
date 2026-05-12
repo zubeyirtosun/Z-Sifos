@@ -27,10 +27,10 @@ export default function Sidebar({ agents, activeAgentId, onSelect, onNew, downlo
               if (!agent) return null;
               const isDownloading = downloadingAgents && downloadingAgents[agent.id];
               return (
-                <button
+                <div
                   key={agent.id}
                   onClick={() => onSelect(agent.id)}
-                  className={`w-full group relative flex items-center p-4 rounded-2xl transition-all duration-300 ${
+                  className={`w-full group relative flex items-center p-4 rounded-2xl transition-all duration-300 cursor-pointer ${
                     activeAgentId === agent.id 
                     ? 'bg-gradient-to-r from-blue-600/20 to-emerald-500/10 border border-blue-500/30' 
                     : 'hover:bg-gray-800/40 border border-transparent'
@@ -83,7 +83,7 @@ export default function Sidebar({ agents, activeAgentId, onSelect, onNew, downlo
                       </div>
                     )}
                   </div>
-                </button>
+                </div>
               );
             })}
       </div>

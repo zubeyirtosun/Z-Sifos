@@ -857,6 +857,9 @@ async def chat_with_agent_stream(
                 full_answer = "".join(full_response)
                 db.add(models.ConversationHistory(agent_id=agent_id, role="ai", message=full_answer))
                 db.commit()
+                
+                # Update metrics
+                _update_metrics(agent_id, executor, full_answer, db)
 
             yield f"data: {json.dumps({'type': 'status', 'content': 'complete'})}\n\n"
         except Exception as e:

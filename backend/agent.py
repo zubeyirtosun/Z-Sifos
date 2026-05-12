@@ -125,21 +125,28 @@ def _build_system_prompt(tools: Dict[str, Any], mode: str, internet_enabled: boo
         "   Do NOT answer from memory for factual questions about real-world entities. Verify first.\n"
     )
 
+    # Only include XML tag format instructions when tools are actually available.
+    # When tools are disabled, the model MUST answer directly without any tags.
+    if internet_enabled and tools:
+        format_rule = (
+            "- **FORMAT:** When using tools, wrap reasoning in <thought>...</thought> and tool calls in <call:TOOL_NAME>...</call>.\n"
+            "- Anything OUTSIDE these tags is your FINAL ANSWER — stream it directly.\n"
+        )
+    else:
+        format_rule = (
+            "- **FORMAT:** Reply DIRECTLY. Do NOT use any XML tags like <thought> or <call>.\n"
+            "- Just write your answer in plain text.\n"
+        )
+
     base = (
         "You are a helpful AI Assistant. Always respond in the SAME LANGUAGE as the user.\n\n"
-        "## MANDATORY PROTOCOLS (ENGLISH):\n"
-        "- **NO SIMULATION:** NEVER simulate tool results or invent search data. Anything outside of <thought> and <call> tags is FINAL ANSWER.\n"
-        "- **TRANSPARENCY:** If you don't know something, say 'I don't know'. DO NOT hallucinate names, dates, or complex details.\n"
-        "- **FORMAT:** Use ONLY the provided XML tags for reasoning. NEVER use labels like 'Action:' or 'Query:' outside tags.\n\n"
-        "## CORE RULES:\n"
-        "1. NEVER invent information. If you are not certain, say so clearly.\n"
-        "2. For greetings or math or definitions you are 100% sure about: reply DIRECTLY.\n"
-        "3. Use tools ONLY for current events or web research.\n"
-        "4. FORMAT: <thought>reason</thought> <call:TOOL_NAME>query</call>\n"
+        "## RULES:\n"
+        "- NEVER invent information. If you are not certain, say so clearly.\n"
+        "- For facts you are 100% certain about (definitions, math, well-known science): reply DIRECTLY.\n"
+        "- If you don't know something, say 'I don't know' instead of guessing.\n"
+        f"{format_rule}"
         f"{internet_rule}"
-        "6. After results, provide FINAL ANSWER directly.\n"
-        "7. NEVER repeat the same search query.\n"
-        "8. Rely on conversation history for context.\n"
+        "- Rely on conversation history for context.\n"
     )
 
     if mode == "STRICT":
@@ -151,23 +158,21 @@ def _build_system_prompt(tools: Dict[str, Any], mode: str, internet_enabled: boo
         )
         directive = (
             "\n## MODE: STRICT (Small Model — ≤2B params)\n"
-            "- Give SHORT, DIRECT answers.\n"
-            "- Use at most ONE tool call per response.\n"
-            "- If you need tools, you MUST output <thought> followed IMMEDIATELY by <call>.\n"
-            f"- When uncertain about any fact (actors, titles, dates, names): {uncertain_msg}\n"
+            "- Give SHORT, DIRECT answers. No lengthy explanations.\n"
+            f"- When uncertain about any fact: {uncertain_msg}\n"
             f"\n{_FEW_SHOT_STRICT}\n"
         )
     elif mode == "ENHANCED":
         directive = (
             "\n## MODE: ENHANCED\n"
-            "- You may chain multiple tool calls when needed.\n"
             "- Provide detailed, well-structured answers with source citations.\n"
-            "- Always verify factual claims about real people/events with search.\n"
+            "- Always verify factual claims about real people/events with search when available.\n"
         )
     else:
         directive = (
             "\n## MODE: STANDARD\n"
-            "- If uncertain about specific facts, acknowledge it before answering.\n"
+            "- Give complete, helpful answers.\n"
+            "- If uncertain about specific facts, acknowledge it.\n"
         )
 
     return base + directive + ("\n\n" + tool_desc if tool_desc else "")
@@ -398,8 +403,9 @@ class CustomAgentExecutor:
         total_tokens_yielded = 0  # Track if any final answer tokens were sent
         accumulated_thought = ""  # Collect thought content as fallback
         
-        # Global output limits by mode
-        MAX_OUTPUT_CHARS = {"STRICT": 1000, "STANDARD": 2000, "ENHANCED": 4000}
+        # Global output limits by mode — generous enough to not truncate good answers
+        # but still prevent infinite loops. Set high; the loop-breaker handles runaway outputs.
+        MAX_OUTPUT_CHARS = {"STRICT": 2000, "STANDARD": 6000, "ENHANCED": 12000}
 
         for iteration in range(self.max_iterations):
             logger.info(f"[AGENT] Iteration {iteration + 1}/{self.max_iterations}")

@@ -342,6 +342,13 @@ function App() {
                 agent={activeAgent}
                 onUpdate={handleUpdateAgent}
                 onClearChat={handleClearChat}
+                onDocumentUploaded={(doc) => {
+                  handleSendMessage({ 
+                    text: `✅ **${doc.original_name}** başarıyla yüklendi (${doc.chunk_count} parça indekslendi).`, 
+                    role: 'ai', 
+                    isStreaming: false 
+                  });
+                }}
               />
             )}
             {activeTab === 'metrics' && (
