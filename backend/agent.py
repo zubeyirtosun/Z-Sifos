@@ -91,7 +91,7 @@ _FEW_SHOT_STRICT = """
 Examples:
 - 2+2 = 4
 - Paris = France capital
-- Use <search>query</search> if you need current info.
+- Use <call:search>query</call> if you need current info.
 Answer directly.""".strip()
 
 # Ultra-light prompt for very small models (<1B params)
@@ -656,18 +656,33 @@ class CustomAgentExecutor:
                             # Generic tool call
                             observation = await tool_func(**json.loads(query) if isinstance(query, str) and query.startswith("{") else {"query": query})
                         
-                        messages.append(AIMessage(content=raw_text))
-                        # Use HumanMessage instead of SystemMessage to guarantee Ollama API preserves the context
+                        # Ensure unclosed call tags are cleanly closed for history representation
+                        history_text = raw_text
+                        if "<call:" in history_text and "</call" not in history_text:
+                            match_tag = re.search(r"<call:(\w+)>", history_text, re.IGNORECASE)
+                            if match_tag:
+                                history_text = history_text.strip() + f"</call>"
+                        
+                        messages.append(AIMessage(content=history_text))
+                        
+                        # Use HumanMessage instead of SystemMessage to guarantee Ollama API preserves the context.
+                        # Wrap with clean English prefixes to prevent small parameter model confusion,
+                        # and strictly prohibit XML tag continuation or repetition.
                         messages.append(HumanMessage(
                             content=(
-                                f"[SİSTEM UYARISI] Arama Sonuçları (Observation):\n{observation[:4000]}\n\n"
-                                "TALİMAT: Lütfen bu en güncel arama sonuçlarını temel alarak sorumu Türkçe olarak "
-                                "tek bir kısa cümleyle yanıtla. Kendi eski eğitim verilerini tamamen yok say."
+                                f"[SYSTEM OBSERVATION] Search Results:\n{observation[:4000]}\n\n"
+                                "DIRECTIVE: Search is complete. Based on the search results above, answer the user's question directly in Turkish as a single short sentence. "
+                                "Completely ignore your outdated training data. DO NOT use any XML tags (<thought> or <call>). Reply with the final answer only!"
                             )
                         ))
                     except Exception as e:
-                        messages.append(AIMessage(content=raw_text))
-                        messages.append(HumanMessage(content=f"[SİSTEM UYARISI] Araç Hatası (Tool Error): {str(e)}"))
+                        history_text = raw_text
+                        if "<call:" in history_text and "</call" not in history_text:
+                            match_tag = re.search(r"<call:(\w+)>", history_text, re.IGNORECASE)
+                            if match_tag:
+                                history_text = history_text.strip() + f"</call>"
+                        messages.append(AIMessage(content=history_text))
+                        messages.append(HumanMessage(content=f"[SYSTEM ERROR] Tool Execution Error: {str(e)}"))
                 else:
                     break
             else:
