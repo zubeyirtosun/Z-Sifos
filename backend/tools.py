@@ -46,6 +46,7 @@ class WebSearchTool(BaseTool):
     input_schema = SearchInput
 
     async def execute_async(self, query: str, max_results: int = 5) -> List[Dict[str, str]]:
+        results = []
         try:
             def sync_search():
                 with DDGS() as ddgs:
@@ -53,17 +54,67 @@ class WebSearchTool(BaseTool):
                     return list(ddgs.text(query, max_results=max_results))
             
             raw_results = await asyncio.to_thread(sync_search)
-            results = []
             for r in raw_results:
                 results.append({
                     "title": r.get("title", ""),
                     "link": r.get("href", ""),
                     "snippet": r.get("body", "")
                 })
-            return results
         except Exception as e:
-            logger.error(f"Search error: {e}")
-            return []
+            logger.warning(f"DuckDuckGo search raised an exception: {e}. Trying Yahoo fallback...")
+
+        if not results:
+            logger.info("DuckDuckGo search returned 0 results or failed. Trying Yahoo Search fallback...")
+            results = await self._yahoo_search(query, max_results)
+
+        return results
+
+    async def _yahoo_search(self, query: str, max_results: int) -> List[Dict[str, str]]:
+        import urllib.parse
+        results = []
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+                resp = await client.get(f"https://search.yahoo.com/search?q={urllib.parse.quote(query)}", headers=headers)
+                if resp.status_code == 200:
+                    soup = BeautifulSoup(resp.text, 'html.parser')
+                    for div in soup.find_all('div', class_='compTitle'):
+                        a = div.find('a')
+                        if a:
+                            raw_link = a.get('href', '')
+                            link = raw_link
+                            if '/RU=' in raw_link:
+                                try:
+                                    parts = raw_link.split('/RU=')
+                                    encoded_url = parts[1].split('/RK=')[0]
+                                    link = urllib.parse.unquote(encoded_url)
+                                except Exception:
+                                    pass
+                            
+                            h3 = a.find('h3')
+                            title = h3.text.strip() if h3 else a.text.strip()
+                            
+                            parent = div.find_parent()
+                            snippet = ''
+                            if parent:
+                                comp_text = parent.find('div', class_='compText') or parent.find('p')
+                                if comp_text:
+                                    snippet = comp_text.text.strip()
+                            
+                            if 'yahoo.com' not in link and 'google.com' not in link:
+                                results.append({
+                                    "title": title,
+                                    "link": link,
+                                    "snippet": snippet
+                                })
+                                if len(results) >= max_results:
+                                    break
+        except Exception as e:
+            logger.error(f"Yahoo fallback search error: {e}")
+        return results
+
 
 class ScrapeInput(BaseModel):
     urls: List[str] = Field(..., description="Okunacak URL listesi")

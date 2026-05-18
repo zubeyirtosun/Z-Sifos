@@ -440,6 +440,17 @@ class CustomAgentExecutor:
                         yield {"type": "status", "content": f"Maksimum çıktı sınırı aşıldı ({max_chars} chars)."}
                         break
 
+                    # Global loop/repetition detection
+                    if len(raw_text) > 200:
+                        window = raw_text[-200:].lower()
+                        words = window.split()
+                        if len(words) > 10:
+                            unique_words = set(words)
+                            if len(unique_words) / len(words) < 0.25:  # Over 75% repetition of words
+                                yield {"type": "status", "content": "Döngü tespit edildi, akış sonlandırılıyor."}
+                                break
+
+
                     # Detect tag transitions (highly flexible for small models)
                     # Also detect if we're in thinking mode (Qwen-style)
                     if not in_thought and not in_call:
@@ -447,6 +458,10 @@ class CustomAgentExecutor:
                             in_thought = True
                             continue
                         
+                        if re.search(r"<call:", raw_text[-20:], re.IGNORECASE):
+                            in_call = True
+                            continue
+
                         # Qwen-style thinking detection - if token contains question words and no <call:>
                         if "analyze the request" in token.lower() or "determine" in token.lower():
                             # Likely in thinking mode - check if it's looping
@@ -463,6 +478,9 @@ class CustomAgentExecutor:
                         
                         # Safety: If we've seen > 10 chars and NO tags, force 'token' type
                         if len(raw_text) > 10 and not in_thought and not in_call:
+                            # If it starts to output tool calls, wait and let tags be detected
+                            if "<" in raw_text[-10:]:
+                                continue
                             # If the model started outputting without tags, yield it as answer
                             yield {"type": "token", "content": token}
                             continue
@@ -556,7 +574,26 @@ class CustomAgentExecutor:
             tool_call = self._extract_tool_call(raw_text) if internet_enabled else None
             
             if tool_call:
-                tool_name, query = tool_call
+                tool_name, raw_query = tool_call
+                # Robust cleaning of hallucinated key-value or JSON query parameters
+                query = raw_query.strip()
+                if query.startswith("{"):
+                    try:
+                        import json
+                        data = json.loads(query)
+                        if isinstance(data, dict):
+                            query = data.get("query") or data.get("search_query") or data.get("q") or query
+                    except Exception:
+                        pass
+                else:
+                    match_q = re.search(r'^(?:query|search_query|q)\s*=\s*["\'](.*?)["\']\s*$', query, re.DOTALL | re.IGNORECASE)
+                    if match_q:
+                        query = match_q.group(1).strip()
+                    else:
+                        match_q2 = re.search(r'^(?:query|search_query|q)\s*=\s*(.*?)\s*$', query, re.DOTALL | re.IGNORECASE)
+                        if match_q2:
+                            query = match_q2.group(1).strip()
+                            
                 if tool_name in self.all_tools:
                     # Update tools_used in plugin context for confidence tracking
                     self.plugin_manager.context.setdefault("tools_used", []).append(tool_name)
@@ -620,10 +657,17 @@ class CustomAgentExecutor:
                             observation = await tool_func(**json.loads(query) if isinstance(query, str) and query.startswith("{") else {"query": query})
                         
                         messages.append(AIMessage(content=raw_text))
-                        messages.append(SystemMessage(content=f"Observation: {observation[:4000]}"))
+                        # Use HumanMessage instead of SystemMessage to guarantee Ollama API preserves the context
+                        messages.append(HumanMessage(
+                            content=(
+                                f"[SİSTEM UYARISI] Arama Sonuçları (Observation):\n{observation[:4000]}\n\n"
+                                "TALİMAT: Lütfen bu en güncel arama sonuçlarını temel alarak sorumu Türkçe olarak "
+                                "tek bir kısa cümleyle yanıtla. Kendi eski eğitim verilerini tamamen yok say."
+                            )
+                        ))
                     except Exception as e:
                         messages.append(AIMessage(content=raw_text))
-                        messages.append(SystemMessage(content=f"Tool Error: {str(e)}"))
+                        messages.append(HumanMessage(content=f"[SİSTEM UYARISI] Araç Hatası (Tool Error): {str(e)}"))
                 else:
                     break
             else:
